@@ -93,15 +93,25 @@ export const createZuckPayPix = createServerFn({ method: "POST" })
         signal: AbortSignal.timeout(15000),
         redirect: "error",
       });
+      if (!response.ok) {
+        console.error("ZuckPay PIX creation failed", response.status);
+        if (response.status === 401 || response.status === 403) {
+          return {
+            ok: false as const,
+            error:
+              "A ZuckPay recusou as credenciais. Confira os valores de ZUCKPAY_CLIENT_ID e ZUCKPAY_CLIENT_SECRET na Vercel.",
+          };
+        }
+        return {
+          ok: false as const,
+          error: "Não foi possível gerar o PIX. Confira seus dados e tente novamente.",
+        };
+      }
+
       const result = responseData(await response.json().catch(() => ({})));
       const transactionId = result.transactionId ?? result.id;
-      if (
-        !response.ok ||
-        transactionId == null ||
-        typeof result.qrcode !== "string" ||
-        !result.qrcode
-      ) {
-        console.error("ZuckPay PIX creation failed", response.status);
+      if (transactionId == null || typeof result.qrcode !== "string" || !result.qrcode) {
+        console.error("ZuckPay PIX creation returned an invalid response");
         return {
           ok: false as const,
           error: "Não foi possível gerar o PIX. Confira seus dados e tente novamente.",
