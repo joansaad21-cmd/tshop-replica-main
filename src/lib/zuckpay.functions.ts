@@ -29,18 +29,24 @@ const createPixSchema = z.object({
   name: z.string().trim().min(3).max(100),
   cpf: z.string().refine(validCpf, "CPF inválido."),
   email: z.string().trim().email().max(255),
-  phone: z.string().refine(value => [10, 11].includes(value.replace(/\D/g, "").length)),
+  phone: z.string().refine((value) => [10, 11].includes(value.replace(/\D/g, "").length)),
   voltage: z.enum(["110V", "220V"]),
   quantity: z.number().int().min(1).max(20),
-  extraIndexes: z.array(z.number().int().min(0).max(3)).max(4)
-    .refine(indexes => new Set(indexes).size === indexes.length),
+  extraIndexes: z
+    .array(z.number().int().min(0).max(3))
+    .max(4)
+    .refine((indexes) => new Set(indexes).size === indexes.length),
   shippingIndex: z.number().int().min(0).max(2),
-  externalIdClient: z.string().min(1).max(100).regex(/^[A-Za-z0-9._:-]+$/),
+  externalIdClient: z
+    .string()
+    .min(1)
+    .max(100)
+    .regex(/^[A-Za-z0-9._:-]+$/),
 });
 
 function record(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? value as Record<string, unknown>
+    ? (value as Record<string, unknown>)
     : {};
 }
 
@@ -59,11 +65,13 @@ function qrImage(value: unknown) {
 export const createZuckPayPix = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => createPixSchema.parse(data))
   .handler(async ({ data }) => {
-    const amount = Math.round((
-      PRODUCT_PRICE * data.quantity +
-      data.extraIndexes.reduce((sum, index) => sum + (EXTRA_PRICES[index] ?? 0), 0) +
-      (SHIPPING_PRICES[data.shippingIndex] ?? 0)
-    ) * 100) / 100;
+    const amount =
+      Math.round(
+        (PRODUCT_PRICE * data.quantity +
+          data.extraIndexes.reduce((sum, index) => sum + (EXTRA_PRICES[index] ?? 0), 0) +
+          (SHIPPING_PRICES[data.shippingIndex] ?? 0)) *
+          100,
+      ) / 100;
 
     try {
       const response = await fetch(`${API}/v3/pix/qrcode`, {
@@ -87,9 +95,17 @@ export const createZuckPayPix = createServerFn({ method: "POST" })
       });
       const result = responseData(await response.json().catch(() => ({})));
       const transactionId = result.transactionId ?? result.id;
-      if (!response.ok || transactionId == null || typeof result.qrcode !== "string" || !result.qrcode) {
+      if (
+        !response.ok ||
+        transactionId == null ||
+        typeof result.qrcode !== "string" ||
+        !result.qrcode
+      ) {
         console.error("ZuckPay PIX creation failed", response.status);
-        return { ok: false as const, error: "Não foi possível gerar o PIX. Confira seus dados e tente novamente." };
+        return {
+          ok: false as const,
+          error: "Não foi possível gerar o PIX. Confira seus dados e tente novamente.",
+        };
       }
       return {
         ok: true as const,
@@ -99,13 +115,27 @@ export const createZuckPayPix = createServerFn({ method: "POST" })
         amount,
       };
     } catch (error) {
-      console.error("ZuckPay PIX request failed", error instanceof Error ? error.name : "Unknown error");
+      console.error(
+        "ZuckPay PIX request failed",
+        error instanceof Error ? error.name : "Unknown error",
+      );
+      if (error instanceof Error && error.message === "Credenciais da ZuckPay não configuradas.") {
+        return {
+          ok: false as const,
+          error:
+            "PIX não configurado no servidor. Adicione ZUCKPAY_CLIENT_ID e ZUCKPAY_CLIENT_SECRET nas variáveis da Vercel.",
+        };
+      }
       return { ok: false as const, error: "Pagamento indisponível no momento. Tente novamente." };
     }
   });
 
 const statusSchema = z.object({
-  transactionId: z.string().min(1).max(100).regex(/^[A-Za-z0-9._:-]+$/),
+  transactionId: z
+    .string()
+    .min(1)
+    .max(100)
+    .regex(/^[A-Za-z0-9._:-]+$/),
 });
 
 export const checkZuckPayPix = createServerFn({ method: "POST" })
